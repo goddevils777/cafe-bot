@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Отчёты - Управление кафе</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>Отчёты о выполнении задач</h1>
+    <p>Пользователь: {{ username }}</p>
+    
+    {% if reports %}
+        <table border="1" style="border-collapse: collapse; width: 100%;">
+            <tr>
+                <th>Задача</th>
+                <th>Выполнил</th>
+                <th>Время выполнения</th>
+            </tr>
+            {% for report in reports %}
+            <tr>
+                <td>{{ report[0] }}</td>
+                <td>@{{ report[1] }}</td>
+                <td>{{ report[2] }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>Выполненных задач пока нет</p>
+    {% endif %}
+    
+    <p>
+        <a href="/">Назад в кабинет</a>
+    </p>
+</body>
+</html>

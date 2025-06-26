@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Личный кабинет - Управление кафе</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>Личный кабинет</h1>
+    <p>Добро пожаловать, {{ username }}!</p>
+    
+    <h2>Настройки бота</h2>
+    <form action="/update_chat_id" method="POST">
+        <p>
+            <label>ID чата группы:</label><br>
+            <input type="text" name="chat_id" placeholder="Получите у бота командой /get_chat_id" required>
+            <input type="submit" value="Обновить чат">
+        </p>
+    </form>
+
+    <h2>Список задач</h2>
+    {% if tasks %}
+        <table border="1" style="border-collapse: collapse; width: 100%;">
+            <tr>
+                <th>Время</th>
+                <th>Задача</th>
+                <th>Тип</th>
+                <th>Создано</th>
+                <th>Действия</th>
+            </tr>
+            {% for task in tasks %}
+            <tr>
+                <td>{{ task[1] }}</td>
+                <td>{{ task[2] }}</td>
+                <td>{% if task[4] == 1 %}🔄 Ежедневно{% else %}📅 Разовая{% endif %}</td>
+                <td>{{ task[3] }}</td>
+                <td>
+                    <a href="/edit_task/{{ task[0] }}">✏️ Редактировать</a> | 
+                    <a href="/delete_task/{{ task[0] }}" onclick="return confirm('Удалить задачу?')">🗑️ Удалить</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>Задач пока нет</p>
+    {% endif %}
+    
+    <h2>Добавить новую задачу</h2>
+    <form action="/add_task" method="POST">
+        <p>
+            <label>Время выполнения:</label><br>
+            <input type="time" name="task_time" required>
+        </p>
+        <p>
+            <label>Описание задачи:</label><br>
+            <textarea name="task_text" rows="3" cols="50" placeholder="Например: Расставить зонты" required></textarea>
+        </p>
+        <p>
+            <label>
+                <input type="checkbox" name="repeat_daily" value="1">
+                Повторять ежедневно
+            </label>
+        </p>
+        <p>
+            <input type="submit" value="Добавить задачу">
+        </p>
+    </form>
+    
+    <p>
+        <a href="/reports">📊 Посмотреть отчёты</a> | 
+        <a href="/logout">Выйти</a>
+    </p>
+</body>
+</html>

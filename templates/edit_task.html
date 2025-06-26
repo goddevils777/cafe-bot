@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Редактирование задачи - Управление кафе</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>Редактирование задачи</h1>
+    
+    <form action="/update_task/{{ task[0] }}" method="POST">
+        <p>
+            <label>Время выполнения:</label><br>
+            <input type="time" name="task_time" value="{{ task[1] }}" required>
+        </p>
+        <p>
+            <label>Описание задачи:</label><br>
+            <textarea name="task_text" rows="3" cols="50" required>{{ task[2] }}</textarea>
+        </p>
+        <p>
+            <label>
+                <input type="checkbox" name="repeat_daily" value="1" {% if task[4] == 1 %}checked{% endif %}>
+                Повторять ежедневно
+            </label>
+        </p>
+        <p>
+            <input type="submit" value="Сохранить изменения">
+            <a href="/">Отмена</a>
+        </p>
+    </form>
+</body>
+</html>

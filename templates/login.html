@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Вход - Управление кафе</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>Вход в систему</h1>
+    
+    <form action="/login" method="POST">
+        <p>
+            <label>Имя пользователя:</label><br>
+            <input type="text" name="username" required>
+        </p>
+        <p>
+            <label>Пароль:</label><br>
+            <input type="password" name="password" required>
+        </p>
+        <p>
+            <input type="submit" value="Войти">
+        </p>
+    </form>
+    
+    <p><a href="/register_page">Нет аккаунта? Зарегистрироваться</a></p>
+</body>
+</html>

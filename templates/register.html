@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Регистрация - Управление кафе</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>Регистрация в системе</h1>
+    
+    <form action="/register" method="POST">
+        <p>
+            <label>Имя пользователя:</label><br>
+            <input type="text" name="username" required>
+        </p>
+        <p>
+            <label>Пароль:</label><br>
+            <input type="password" name="password" required>
+        </p>
+        <p>
+            <label>ID чата группы:</label><br>
+            <input type="text" name="chat_id" placeholder="Получите у бота командой /get_chat_id" required>
+        </p>
+        <p>
+            <input type="submit" value="Зарегистрироваться">
+        </p>
+    </form>
+    
+    <p><a href="/">Уже есть аккаунт? Войти</a></p>
+</body>
+</html>
