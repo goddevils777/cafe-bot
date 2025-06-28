@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Настройки - Управление кафе</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>Настройки</h1>
+    <p>Пользователь: {{ username }}</p>
+    
+    <h2>Настройки бота</h2>
+    {% if current_chat_info %}
+        <div style="background: #e8f5e8; padding: 15px; margin: 10px 0; border-left: 4px solid #28a745;">
+            <h4>✅ Текущая группа:</h4>
+            <p><strong>ID:</strong> 
+                <span onclick="copyToClipboard('{{ current_chat_info.id }}', 'ID группы')" 
+                      style="cursor: pointer; background: #f0f0f0; padding: 2px 5px; border-radius: 3px;">
+                    {{ current_chat_info.id }}
+                </span> 📋
+            </p>
+            <p><strong>Название:</strong> {{ current_chat_info.title }}</p>
+            <p><strong>Статус:</strong> Подключена</p>
+            
+            {% if chat_members %}
+            <h4>👥 Участники группы ({{ chat_members|length }}):</h4>
+            <div style="max-height: 200px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: white;">
+                {% for member in chat_members %}
+                <div style="margin: 5px 0; padding: 5px; border-bottom: 1px solid #eee;">
+                    <strong>{{ member.name }}</strong>
+                    <span onclick="copyToClipboard('{{ member.username }}', 'Username')" 
+                          style="cursor: pointer; background: #f0f0f0; padding: 2px 5px; border-radius: 3px; margin-left: 10px;">
+                        {{ member.username }}
+                    </span> 📋
+                    <small style="color: #666;">({{ member.status }}{% if member.is_admin %} - Админ{% endif %})</small>
+                </div>
+                {% endfor %}
+            </div>
+            <small style="color: #666;">💡 Нажмите на ID или username чтобы скопировать</small>
+            {% endif %}
+        </div>
+    {% endif %}
+    
+    <div style="background: #f0f8ff; padding: 15px; margin: 10px 0; border-left: 4px solid #007bff;">
+        <h4>📋 Инструкция по настройке:</h4>
+        <ol>
+            <li>Добавьте бота в группу кафе как администратора</li>
+            <li>В группе напишите команду <code>/setup</code></li>
+            <li>Бот покажет ID группы - скопируйте его сюда:</li>
+        </ol>
+    </div>
+    
+    <form action="/update_chat_id" method="POST">
+        <p>
+            <label>ID чата группы:</label><br>
+            <input type="text" name="chat_id" placeholder="-1001234567890" value="{{ current_chat_id or '' }}" required>
+            <input type="submit" value="Обновить чат">
+        </p>
+    </form>
+    
+    <p>
+        <a href="/">← Назад в кабинет</a>
+    </p>
+
+    <!-- Уведомление о копировании -->
+    <div id="copyNotification" style="
+        position: fixed; 
+        top: 20px; 
+        right: 20px; 
+        background: #28a745; 
+        color: white; 
+        padding: 10px 15px; 
+        border-radius: 5px; 
+        display: none;
+        z-index: 1000;
+    ">
+        ✅ Скопировано!
+    </div>
+
+    <script>
+        function copyToClipboard(text, type) {
+            navigator.clipboard.writeText(text).then(function() {
+                // Показываем уведомление
+                const notification = document.getElementById('copyNotification');
+                notification.textContent = `✅ ${type} скопирован!`;
+                notification.style.display = 'block';
+                
+                // Скрываем через 2 секунды
+                setTimeout(function() {
+                    notification.style.display = 'none';
+                }, 2000);
+            }).catch(function() {
+                alert('Ошибка копирования');
+            });
+        }
+    </script>
+
+</body>
+</html>

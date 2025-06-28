@@ -7,7 +7,7 @@
 <body>
     <h1>Редактирование задачи</h1>
     
-    <form action="/update_task/{{ task[0] }}" method="POST">
+   <form action="/update_task/{{ task[0] }}" method="POST">
         <p>
             <label>Время выполнения:</label><br>
             <input type="time" name="task_time" value="{{ task[1] }}" required>
@@ -17,9 +17,33 @@
             <textarea name="task_text" rows="3" cols="50" required>{{ task[2] }}</textarea>
         </p>
         <p>
+            <label>Назначить исполнителя (необязательно):</label><br>
+            <input type="text" name="assigned_to" id="assigned_to" value="{% if task[8] %}{{ task[8] }}{% endif %}" placeholder="@username или оставьте пустым для всех" autocomplete="off">
+            <div id="suggestions" style="display: none; position: absolute; background: white; border: 1px solid #ccc; max-height: 150px; overflow-y: auto; z-index: 1000;"></div>
+            <small style="color: #666;">💡 Укажите @username для персональной задачи</small>
+        </p>
+        <p>
+            <label>Тип повторения:</label><br>
+            <input type="radio" name="repeat_type" value="once" {% if task[4] == 0 and task[6] == 0 %}checked{% endif %}> 📅 Разовая задача<br>
+            <input type="radio" name="repeat_type" value="daily" {% if task[4] == 1 %}checked{% endif %}> 🔄 Ежедневно<br>
+            <input type="radio" name="repeat_type" value="weekly" {% if task[6] == 1 %}checked{% endif %}> 📅 Еженедельно
+        </p>
+        <p id="week_day_select" {% if task[6] == 0 %}style="display: none;"{% endif %}>
+            <label>День недели:</label><br>
+            <select name="week_day">
+                <option value="0" {% if task[7] == 0 %}selected{% endif %}>Понедельник</option>
+                <option value="1" {% if task[7] == 1 %}selected{% endif %}>Вторник</option>
+                <option value="2" {% if task[7] == 2 %}selected{% endif %}>Среда</option>
+                <option value="3" {% if task[7] == 3 %}selected{% endif %}>Четверг</option>
+                <option value="4" {% if task[7] == 4 %}selected{% endif %}>Пятница</option>
+                <option value="5" {% if task[7] == 5 %}selected{% endif %}>Суббота</option>
+                <option value="6" {% if task[7] == 6 %}selected{% endif %}>Воскресенье</option>
+            </select>
+        </p>
+        <p>
             <label>
-                <input type="checkbox" name="repeat_daily" value="1" {% if task[4] == 1 %}checked{% endif %}>
-                Повторять ежедневно
+                <input type="checkbox" name="require_photo" value="1" {% if task[5] == 1 %}checked{% endif %}>
+                📸 Требует фото-отчёт (через 5 мин после выполнения)
             </label>
         </p>
         <p>
@@ -27,5 +51,74 @@
             <a href="/">Отмена</a>
         </p>
     </form>
+    
+    <script>
+        // Показываем выбор дня недели только для еженедельных задач
+        document.querySelectorAll('input[name="repeat_type"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const weekDaySelect = document.getElementById('week_day_select');
+                if (this.value === 'weekly') {
+                    weekDaySelect.style.display = 'block';
+                } else {
+                    weekDaySelect.style.display = 'none';
+                }
+            });
+        });
+    </script>
+    <script>
+    const assignedInput = document.getElementById('assigned_to');
+    const suggestionsDiv = document.getElementById('suggestions');
+    const usernames = [
+        {% if used_usernames %}
+            {% for nickname in used_usernames %}
+            "{{ nickname }}",
+            {% endfor %}
+        {% endif %}
+    ];
+
+    // Показываем все никнеймы при клике на поле
+    assignedInput.addEventListener('focus', function() {
+        if (usernames.length > 0) {
+            suggestionsDiv.innerHTML = usernames.map(name => 
+                `<div style="padding: 8px; cursor: pointer; border-bottom: 1px solid #eee;" onclick="selectUsername('${name}')">${name}</div>`
+            ).join('');
+            suggestionsDiv.style.display = 'block';
+        }
+    });
+
+    assignedInput.addEventListener('click', function() {
+        if (usernames.length > 0) {
+            suggestionsDiv.innerHTML = usernames.map(name => 
+                `<div style="padding: 8px; cursor: pointer; border-bottom: 1px solid #eee;" onclick="selectUsername('${name}')">${name}</div>`
+            ).join('');
+            suggestionsDiv.style.display = 'block';
+        }
+    });
+
+    assignedInput.addEventListener('input', function() {
+        const value = this.value.toLowerCase();
+        const filtered = usernames.filter(name => name.toLowerCase().includes(value));
+        
+        if (value.length > 0 && filtered.length > 0) {
+            suggestionsDiv.innerHTML = filtered.map(name => 
+                `<div style="padding: 8px; cursor: pointer; border-bottom: 1px solid #eee;" onclick="selectUsername('${name}')">${name}</div>`
+            ).join('');
+            suggestionsDiv.style.display = 'block';
+        } else {
+            suggestionsDiv.style.display = 'none';
+        }
+    });
+
+    function selectUsername(name) {
+        assignedInput.value = name;
+        suggestionsDiv.style.display = 'none';
+    }
+
+    document.addEventListener('click', function(e) {
+        if (!assignedInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+            suggestionsDiv.style.display = 'none';
+        }
+    });
+    </script>
 </body>
 </html>

@@ -7,31 +7,30 @@
 <body>
     <h1>Личный кабинет</h1>
     <p>Добро пожаловать, {{ username }}!</p>
-    
-    <h2>Настройки бота</h2>
-    <form action="/update_chat_id" method="POST">
-        <p>
-            <label>ID чата группы:</label><br>
-            <input type="text" name="chat_id" placeholder="Получите у бота командой /get_chat_id" required>
-            <input type="submit" value="Обновить чат">
-        </p>
-    </form>
 
-    <h2>Список задач</h2>
-    {% if tasks %}
+    <h2>📋 Активные задачи</h2>
+    {% if active_tasks %}
         <table border="1" style="border-collapse: collapse; width: 100%;">
-            <tr>
+           <tr>
                 <th>Время</th>
                 <th>Задача</th>
+                <th>Исполнитель</th>
                 <th>Тип</th>
+                <th>Фото-отчёт</th>
                 <th>Создано</th>
                 <th>Действия</th>
             </tr>
-            {% for task in tasks %}
+            {% for task in active_tasks %}
             <tr>
                 <td>{{ task[1] }}</td>
                 <td>{{ task[2] }}</td>
-                <td>{% if task[4] == 1 %}🔄 Ежедневно{% else %}📅 Разовая{% endif %}</td>
+                <td>{% if task[8] %}{{ task[8] }}{% else %}Для всех{% endif %}</td>
+                <td>
+                    {% if task[4] == 1 %}🔄 Ежедневно
+                    {% elif task[6] == 1 %}📅 Еженедельно ({{ ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][task[7]] }})
+                    {% else %}📅 Разовая{% endif %}
+                </td>
+                <td>{% if task[5] == 1 %}📸 Да{% else %}—{% endif %}</td>
                 <td>{{ task[3] }}</td>
                 <td>
                     <a href="/edit_task/{{ task[0] }}">✏️ Редактировать</a> | 
@@ -41,7 +40,36 @@
             {% endfor %}
         </table>
     {% else %}
-        <p>Задач пока нет</p>
+        <p>Активных задач пока нет</p>
+    {% endif %}
+    
+    <h2>✅ Выполненные разовые задачи</h2>
+    {% if completed_tasks %}
+        <table border="1" style="border-collapse: collapse; width: 100%;">
+            <tr>
+                <th>Время</th>
+                <th>Задача</th>
+                <th>Исполнитель</th>
+                <th>Фото-отчёт</th>
+                <th>Создано</th>
+                <th>Действия</th>
+            </tr>
+            {% for task in completed_tasks %}
+            <tr style="background-color: #f8f9fa;">
+                <td>{{ task[1] }}</td>
+                <td>{{ task[2] }}</td>
+                <td>{% if task[8] %}{{ task[8] }}{% else %}Для всех{% endif %}</td>
+                <td>{% if task[5] == 1 %}📸 Да{% else %}—{% endif %}</td>
+                <td>{{ task[3] }}</td>
+                <td>
+                    <a href="/restart_task/{{ task[0] }}">🔄 Перезапустить</a> | 
+                    <a href="/delete_task/{{ task[0] }}" onclick="return confirm('Удалить задачу?')">🗑️ Удалить</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>Выполненных разовых задач пока нет</p>
     {% endif %}
     
     <h2>Добавить новую задачу</h2>
@@ -55,9 +83,94 @@
             <textarea name="task_text" rows="3" cols="50" placeholder="Например: Расставить зонты" required></textarea>
         </p>
         <p>
+            <label>Назначить исполнителя (необязательно):</label><br>
+            <input type="text" name="assigned_to" id="assigned_to" placeholder="@username или оставьте пустым для всех" autocomplete="off">
+            <div id="suggestions" style="display: none; position: absolute; background: white; border: 1px solid #ccc; max-height: 150px; overflow-y: auto; z-index: 1000;"></div>
+
+            <script>
+            const assignedInput = document.getElementById('assigned_to');
+            const suggestionsDiv = document.getElementById('suggestions');
+            const usernames = [
+                {% if used_usernames %}
+                    {% for nickname in used_usernames %}
+                    "{{ nickname }}",
+                    {% endfor %}
+                {% endif %}
+            ];
+
+            // Показываем все никнеймы при клике на поле
+            assignedInput.addEventListener('focus', function() {
+                if (usernames.length > 0) {
+                    suggestionsDiv.innerHTML = usernames.map(name => 
+                        `<div style="padding: 8px; cursor: pointer; border-bottom: 1px solid #eee;" onclick="selectUsername('${name}')">${name}</div>`
+                    ).join('');
+                    suggestionsDiv.style.display = 'block';
+                }
+            });
+
+            assignedInput.addEventListener('click', function() {
+                if (usernames.length > 0) {
+                    suggestionsDiv.innerHTML = usernames.map(name => 
+                        `<div style="padding: 8px; cursor: pointer; border-bottom: 1px solid #eee;" onclick="selectUsername('${name}')">${name}</div>`
+                    ).join('');
+                    suggestionsDiv.style.display = 'block';
+                }
+            });
+
+            assignedInput.addEventListener('input', function() {
+                const value = this.value.toLowerCase();
+                const filtered = usernames.filter(name => name.toLowerCase().includes(value));
+                
+                if (value.length > 0 && filtered.length > 0) {
+                    suggestionsDiv.innerHTML = filtered.map(name => 
+                        `<div style="padding: 8px; cursor: pointer; border-bottom: 1px solid #eee;" onclick="selectUsername('${name}')">${name}</div>`
+                    ).join('');
+                    suggestionsDiv.style.display = 'block';
+                } else {
+                    suggestionsDiv.style.display = 'none';
+                }
+            });
+
+            function selectUsername(name) {
+                assignedInput.value = name;
+                suggestionsDiv.style.display = 'none';
+            }
+
+            document.addEventListener('click', function(e) {
+                if (!assignedInput.contains(e.target) && !suggestionsDiv.contains(e.target)) {
+                    suggestionsDiv.style.display = 'none';
+                }
+            });
+            </script>
+            <small style="color: #666;">💡 Укажите @username для персональной задачи или оставьте пустым для всей команды</small>
+        </p>
+        <p>
+            <label>Тип повторения:</label><br>
+            <input type="radio" name="repeat_type" value="once" checked> 📅 Разовая задача<br>
+            <input type="radio" name="repeat_type" value="daily"> 🔄 Ежедневно<br>
+            <input type="radio" name="repeat_type" value="weekly"> 📅 Еженедельно
+        </p>
+        <p id="specific_date_select" style="display: block;">
+            <label>Дата выполнения (для разовых задач):</label><br>
+            <input type="date" name="task_date" id="task_date">
+            <small style="color: #666;">💡 Оставьте пустым для выполнения сегодня</small>
+        </p>
+        <p id="week_day_select" style="display: none;">
+            <label>День недели:</label><br>
+            <select name="week_day">
+                <option value="0">Понедельник</option>
+                <option value="1">Вторник</option>
+                <option value="2">Среда</option>
+                <option value="3">Четверг</option>
+                <option value="4">Пятница</option>
+                <option value="5">Суббота</option>
+                <option value="6">Воскресенье</option>
+            </select>
+        </p>
+        <p>
             <label>
-                <input type="checkbox" name="repeat_daily" value="1">
-                Повторять ежедневно
+                <input type="checkbox" name="require_photo" value="1">
+                📸 Требует фото-отчёт (через 5 мин после выполнения)
             </label>
         </p>
         <p>
@@ -65,8 +178,30 @@
         </p>
     </form>
     
-    <p>
+    <script>
+        // Показываем соответствующие поля в зависимости от типа повторения
+        document.querySelectorAll('input[name="repeat_type"]').forEach(radio => {
+            radio.addEventListener('change', function() {
+                const weekDaySelect = document.getElementById('week_day_select');
+                const specificDateSelect = document.getElementById('specific_date_select');
+                
+                if (this.value === 'weekly') {
+                    weekDaySelect.style.display = 'block';
+                    specificDateSelect.style.display = 'none';
+                } else if (this.value === 'once') {
+                    weekDaySelect.style.display = 'none';
+                    specificDateSelect.style.display = 'block';
+                } else {
+                    weekDaySelect.style.display = 'none';
+                    specificDateSelect.style.display = 'none';
+                }
+            });
+        });
+    </script>
+    
+   <p>
         <a href="/reports">📊 Посмотреть отчёты</a> | 
+        <a href="/settings">⚙️ Настройки</a> | 
         <a href="/logout">Выйти</a>
     </p>
 </body>
