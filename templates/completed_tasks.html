@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Выполненные задачи - Управление кафе</title>
+    <meta charset="UTF-8">
+</head>
+<body>
+    <h1>✅ Выполненные разовые задачи</h1>
+    <p>Пользователь: {{ username }}</p>
+
+    <!-- Блок фильтров для выполненных задач -->
+    <div style="background: #f8f9fa; padding: 15px; margin: 10px 0; border-radius: 5px; border: 1px solid #dee2e6;">
+        <h4>🔍 Фильтры выполненных задач:</h4>
+        <div style="display: flex; gap: 20px; flex-wrap: wrap; align-items: center;">
+            
+            <!-- Фильтр по дате выполнения -->
+            <div>
+                <label><strong>По дате выполнения:</strong></label><br>
+                <select id="completedDateFilter" onchange="applyCompletedFilters()">
+                    <option value="all">Все</option>
+                    <option value="today">Сегодня</option>
+                    <option value="yesterday">Вчера</option>
+                    <option value="week">За неделю</option>
+                    <option value="month">За месяц</option>
+                </select>
+            </div>
+            
+            <!-- Фильтр по исполнителю -->
+            <div>
+                <label><strong>По исполнителю:</strong></label><br>
+                <select id="completedExecutorFilter" onchange="applyCompletedFilters()">
+                    <option value="all">Все</option>
+                    <!-- Заполнится JS -->
+                </select>
+            </div>
+            
+            <!-- Фильтр по типу -->
+            <div>
+                <label><strong>По типу:</strong></label><br>
+                <select id="completedTypeFilter" onchange="applyCompletedFilters()">
+                    <option value="all">Все</option>
+                    <!-- Заполнится JS -->
+                </select>
+            </div>
+            
+            <!-- Фильтр по настройкам (фото/групповые) -->
+            <div>
+                <label><strong>По настройкам:</strong></label><br>
+                <select id="completedSettingsFilter" onchange="applyCompletedFilters()">
+                    <option value="all">Все</option>
+                    <option value="photo">С фото-отчётом</option>
+                    <option value="group">Групповые</option>
+                    <option value="simple">Обычные</option>
+                </select>
+            </div>
+            
+            <!-- Кнопка сброса -->
+            <div>
+                <br>
+                <button onclick="resetCompletedFilters()" style="padding: 5px 10px;">🗑️ Сбросить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Кнопки массового удаления для выполненных задач -->
+    <div style="margin: 10px 0;">
+        <button onclick="deleteSelectedCompleted()" style="background: #dc3545; color: white; padding: 8px 15px; border: none; border-radius: 3px; cursor: pointer;">
+            🗑️ Удалить выбранные выполненные задачи
+        </button>
+        <span id="completedSelectedCount" style="margin-left: 10px; color: #666;"></span>
+    </div>
+
+    {% if completed_tasks %}
+        <table id="completedTasks" border="1" style="border-collapse: collapse; width: 100%;">
+            <tr>
+                <th>
+                    <input type="checkbox" id="selectAllCompleted" onchange="toggleAllCompleted()"> Все
+                </th>
+                <th>Время</th>
+                <th>Дата</th>
+                <th>Задача</th>
+                <th>Исполнитель</th>
+                <th>Тип</th>
+                <th>Настройки</th>
+                <th>Дата выполнения</th>
+                <th>Выполнили</th>
+                <th>Действия</th>
+            </tr>
+            {% for task in completed_tasks %}
+            <tr style="background-color: #f8f9fa;">
+                <td>
+                    <input type="checkbox" class="task-checkbox-completed" value="{{ task[0] }}">
+                </td>
+                <td>{{ task[1] }}</td>
+                <td>
+                    {% if task[4] == 1 %}
+                        Постоянно
+                    {% elif task[6] == 1 %}
+                        {{ ['Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота', 'Воскресенье'][task[7]] }}
+                    {% elif task[10] == 1 %}
+                        {{ task[11] }} число
+                    {% elif task[9] %}
+                        {{ task[9] }}
+                    {% else %}
+                        Сегодня
+                    {% endif %}
+                </td>
+                <td>{{ task[2] }}</td>
+                <td>{% if task[8] %}{{ task[8] }}{% else %}Для всех{% endif %}</td>
+                <td>
+                    {% if task[4] == 1 %}🔄 Постоянные
+                    {% elif task[6] == 1 %}📅 Еженедельно ({{ ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'][task[7]] }})
+                    {% elif task[10] == 1 %}🗓️ Ежемесячно ({{ task[11] }} число)
+                    {% else %}📅 Разовая{% endif %}
+                </td>
+                <td>
+                    {% if task[5] == 1 %}📸 Да{% else %}—{% endif %}
+                    {% if task[12] == 1 %}<br>👥 Групповая{% endif %}
+                </td>
+                <td>
+                    {% if task[13] %}
+                        <span style="color: #28a745; font-weight: bold;">{{ task[13] }}</span>
+                    {% else %}
+                        <span style="color: #dc3545;">Не выполнено</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if task[14] %}
+                        <small style="color: #666;">{{ task[14] }}</small>
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="/restart_task/{{ task[0] }}">🔄 Перезапустить</a> | 
+                    <a href="/delete_task/{{ task[0] }}" onclick="return confirm('Удалить задачу?')">🗑️ Удалить</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>Выполненных задач пока нет</p>
+    {% endif %}
+    
+    <p>
+        <a href="/">← Назад к активным задачам</a> | 
+        <a href="/reports">📊 Отчёты</a> | 
+        <a href="/settings">⚙️ Настройки</a> | 
+        <a href="/logout">Выйти</a>
+    </p>
+
+    <script>
+        // JavaScript для фильтрации выполненных задач
+        function populateCompletedFilters() {
+            const table = document.getElementById('completedTasks');
+            if (!table) return;
+            
+            const rows = table.querySelectorAll('tbody tr, tr:not(:first-child)');
+            
+            const executors = new Set(['Все']);
+            const types = new Set(['Все']);
+            
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length > 5) {
+                    // Исполнитель (5-я колонка)
+                    const executor = cells[4].textContent.trim();
+                    if (executor && executor !== 'Для всех') {
+                        executors.add(executor);
+                    } else {
+                        executors.add('Для всех');
+                    }
+                    
+                    // Тип (6-я колонка)
+                    const type = cells[5].textContent.trim();
+                    if (type) {
+                        types.add(type);
+                    }
+                }
+            });
+            
+            // Заполняем селект исполнителей
+            const executorSelect = document.getElementById('completedExecutorFilter');
+            if (executorSelect) {
+                executorSelect.innerHTML = '<option value="all">Все</option>';
+                Array.from(executors).sort().forEach(executor => {
+                    if (executor !== 'Все') {
+                        const option = document.createElement('option');
+                        option.value = executor;
+                        option.textContent = executor;
+                        executorSelect.appendChild(option);
+                    }
+                });
+            }
+            
+            // Заполняем селект типов
+            const typeSelect = document.getElementById('completedTypeFilter');
+            if (typeSelect) {
+                typeSelect.innerHTML = '<option value="all">Все</option>';
+                Array.from(types).sort().forEach(type => {
+                    if (type !== 'Все') {
+                        const option = document.createElement('option');
+                        option.value = type;
+                        option.textContent = type;
+                        typeSelect.appendChild(option);
+                    }
+                });
+            }
+        }
+
+        function applyCompletedFilters() {
+            const dateFilter = document.getElementById('completedDateFilter').value;
+            const executorFilter = document.getElementById('completedExecutorFilter').value;
+            const typeFilter = document.getElementById('completedTypeFilter').value;
+            const settingsFilter = document.getElementById('completedSettingsFilter').value;
+            
+            const table = document.getElementById('completedTasks');
+            if (!table) return;
+            
+            const rows = table.querySelectorAll('tbody tr, tr:not(:first-child)');
+            
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            const todayStr = today.toLocaleDateString('uk-UA');
+            const yesterdayStr = yesterday.toLocaleDateString('uk-UA');
+            
+            rows.forEach(row => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length === 0) return;
+                
+                let showRow = true;
+                
+                // Фильтр по дате выполнения
+                if (dateFilter !== 'all') {
+                    const dateCell = cells[7].textContent.trim();
+                    
+                    if (dateFilter === 'today' && !dateCell.includes(todayStr)) {
+                        showRow = false;
+                    } else if (dateFilter === 'yesterday' && !dateCell.includes(yesterdayStr)) {
+                        showRow = false;
+                    } else if (dateFilter === 'week' || dateFilter === 'month') {
+                        if (dateCell === 'Не выполнено') {
+                            showRow = false;
+                        }
+                    }
+                }
+                
+                // Фильтр по исполнителю
+                if (executorFilter !== 'all' && showRow) {
+                    const executorCell = cells[4].textContent.trim();
+                    if (executorCell !== executorFilter) {
+                        showRow = false;
+                    }
+                }
+                
+                // Фильтр по типу
+                if (typeFilter !== 'all' && showRow) {
+                    const typeCell = cells[5].textContent.trim();
+                    if (typeCell !== typeFilter) {
+                        showRow = false;
+                    }
+                }
+                
+                // Фильтр по настройкам
+                if (settingsFilter !== 'all' && showRow) {
+                    const settingsCell = cells[6].textContent.trim();
+                    
+                    if (settingsFilter === 'photo' && !settingsCell.includes('📸')) {
+                        showRow = false;
+                    } else if (settingsFilter === 'group' && !settingsCell.includes('👥')) {
+                        showRow = false;
+                    } else if (settingsFilter === 'simple' && (settingsCell.includes('📸') || settingsCell.includes('👥'))) {
+                        showRow = false;
+                    }
+                }
+                
+                row.style.display = showRow ? '' : 'none';
+            });
+        }
+
+        function resetCompletedFilters() {
+            document.getElementById('completedDateFilter').value = 'all';
+            document.getElementById('completedExecutorFilter').value = 'all';
+            document.getElementById('completedTypeFilter').value = 'all';
+            document.getElementById('completedSettingsFilter').value = 'all';
+            applyCompletedFilters();
+        }
+
+        function toggleAllCompleted() {
+            const selectAll = document.getElementById('selectAllCompleted');
+            const checkboxes = document.querySelectorAll('.task-checkbox-completed');
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAll.checked;
+            });
+            
+            updateCompletedCount();
+        }
+
+        function updateCompletedCount() {
+            const checkboxes = document.querySelectorAll('.task-checkbox-completed:checked');
+            const count = checkboxes.length;
+            const countSpan = document.getElementById('completedSelectedCount');
+            
+            if (count > 0) {
+                countSpan.textContent = `Выбрано: ${count}`;
+                countSpan.style.color = '#28a745';
+            } else {
+                countSpan.textContent = '';
+            }
+        }
+
+        function deleteSelectedCompleted() {
+            const checkboxes = document.querySelectorAll('.task-checkbox-completed:checked');
+            const taskIds = Array.from(checkboxes).map(cb => cb.value);
+            
+            if (taskIds.length === 0) {
+                alert('Выберите задачи для удаления');
+                return;
+            }
+            
+            if (confirm(`Вы уверены, что хотите удалить ${taskIds.length} выполненных задач?`)) {
+                fetch('/delete_multiple_tasks', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ task_ids: taskIds, type: 'completed' })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        alert('Ошибка удаления: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    alert('Ошибка: ' + error);
+                });
+            }
+        }
+
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            populateCompletedFilters();
+            
+            // Обработчики для чекбоксов
+            document.addEventListener('change', function(e) {
+                if (e.target.classList.contains('task-checkbox-completed')) {
+                    updateCompletedCount();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

@@ -93,61 +93,98 @@ pending_photo_requests = []
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('done_'))
 def handle_task_completion(call):
-    # Извлекаем данные из callback (формат: done_task_id_username_require_photo)
-    data_parts = call.data.split('_')
-    task_id = data_parts[1]
-    username = data_parts[2]
-    require_photo = int(data_parts[3]) if len(data_parts) > 3 else 0
-    
-    # Сохраняем в отчёт
-    completed_by = call.from_user.username or call.from_user.first_name
-    task_text = call.message.text.replace('🔔 Напоминание: ', '').replace(' (ежедневно)', '').replace(' 📸', '')
-    
-    conn = sqlite3.connect('bot_database.db')
-    cursor = conn.cursor()
-    cursor.execute('INSERT INTO task_completions (task_id, username, task_text, completed_by) VALUES (?, ?, ?, ?)', 
-                  (task_id, username, task_text, completed_by))
-    conn.commit()
-
-    # Деактивируем разовые задачи после выполнения
-    cursor.execute('SELECT repeat_daily, repeat_weekly FROM tasks WHERE id = ?', (task_id,))
-    task_info = cursor.fetchone()
-    if task_info and task_info[0] == 0 and task_info[1] == 0:  # Если разовая задача
-        cursor.execute('UPDATE tasks SET is_active = 0 WHERE id = ?', (task_id,))
-    conn.commit()
-
-    conn.close()
-    
-    # Отвечаем пользователю
-    if require_photo:
-        bot.answer_callback_query(call.id, f'✅ Задача отмечена! Через 5 минут запросим фото-отчёт')
+    try:
+        print(f'DEBUG: Получен callback: {call.data}')
         
-        # Добавляем в список для фото-запроса через 5 минут
-        from datetime import datetime, timedelta
-        import pytz
+        # Извлекаем данные из callback
+        data_parts = call.data.split('_')
+        task_id = data_parts[1]
+        username = data_parts[2]
+        require_photo = int(data_parts[3]) if len(data_parts) > 3 else 0
+        allow_multiple = int(data_parts[4]) if len(data_parts) > 4 else 0
         
-        ukraine_tz = pytz.timezone('Europe/Kiev')
-        photo_time = datetime.now(ukraine_tz) + timedelta(minutes=5)
+        completed_by = call.from_user.username or call.from_user.first_name
+        task_text = call.message.text.replace('🔔 Напоминание: ', '').replace(' (ежедневно)', '').replace(' 📸', '')
         
-        pending_photo_requests.append({
-            'time': photo_time.strftime('%H:%M'),
-            'chat_id': call.message.chat.id,
-            'task_text': task_text,
-            'completed_by': completed_by,
-            'date': photo_time.strftime('%Y-%m-%d')
-        })
+        print(f'DEBUG: Выполнил: {completed_by}, allow_multiple: {allow_multiple}')
         
-        print(f'Запланирован фото-запрос на {photo_time.strftime("%H:%M")} для задачи: {task_text}')
-    else:
-        bot.answer_callback_query(call.id, f'✅ Задача отмечена как выполненная!')
-    
-    # Обновляем сообщение
-    photo_icon = ' 📸' if require_photo else ''
-    bot.edit_message_text(
-        text=call.message.text + f'\n\n✅ Выполнено: @{completed_by}{photo_icon}',
-        chat_id=call.message.chat.id,
-        message_id=call.message.message_id
-    )
+        # Подключаемся к базе
+        conn = sqlite3.connect('bot_database.db')
+        cursor = conn.cursor()
+        
+        # Для групповых задач - проверяем не выполнял ли уже этот пользователь
+        if allow_multiple:
+            from datetime import datetime
+            today = datetime.now().strftime('%Y-%m-%d')
+            
+            cursor.execute('''
+                SELECT COUNT(*) FROM task_completions 
+                WHERE task_id = ? AND completed_by = ? AND DATE(completed_at) = ?
+            ''', (task_id, completed_by, today))
+            
+            already_completed = cursor.fetchone()[0] > 0
+            
+            if already_completed:
+                bot.answer_callback_query(call.id, f'❌ Вы уже отметили выполнение этой задачи сегодня!')
+                conn.close()
+                return
+        
+        # Сохраняем выполнение
+        cursor.execute('INSERT INTO task_completions (task_id, username, task_text, completed_by) VALUES (?, ?, ?, ?)', 
+                      (task_id, username, task_text, completed_by))
+        conn.commit()
+        
+        # Для обычных задач - деактивируем
+        if not allow_multiple:
+            cursor.execute('SELECT repeat_daily, repeat_weekly, repeat_monthly FROM tasks WHERE id = ?', (task_id,))
+            task_info = cursor.fetchone()
+            if task_info and task_info[0] == 0 and task_info[1] == 0 and task_info[2] == 0:
+                cursor.execute('UPDATE tasks SET is_active = 0 WHERE id = ?', (task_id,))
+                conn.commit()
+        
+        # Получаем всех кто выполнил задачу сегодня (для групповых)
+        if allow_multiple:
+            from datetime import datetime
+            today = datetime.now().strftime('%Y-%m-%d')
+            cursor.execute('''
+                SELECT completed_by FROM task_completions 
+                WHERE task_id = ? AND DATE(completed_at) = ?
+                ORDER BY completed_at
+            ''', (task_id, today))
+            all_completed = [row[0] for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        # Ответ пользователю
+        if allow_multiple:
+            bot.answer_callback_query(call.id, f'✅ Задача отмечена! (Групповая)')
+        else:
+            bot.answer_callback_query(call.id, f'✅ Задача отмечена!')
+        
+        # Обновляем сообщение
+        if allow_multiple:
+            # Для групповых - показываем список всех выполнивших
+            completed_list = '\n'.join([f'@{user}' for user in all_completed])
+            original_text = call.message.text.split('\n\n✅')[0]  # Убираем старый список
+            new_text = original_text + f'\n\n✅ Выполнили:\n{completed_list}'
+            
+            bot.edit_message_text(
+                text=new_text,
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id,
+                reply_markup=call.message.reply_markup  # Кнопка остается
+            )
+        else:
+            # Для обычных - убираем кнопку
+            bot.edit_message_text(
+                text=call.message.text + f'\n\n✅ Выполнено: @{completed_by}',
+                chat_id=call.message.chat.id,
+                message_id=call.message.message_id
+            )
+        
+    except Exception as e:
+        print(f'ОШИБКА: {e}')
+        bot.answer_callback_query(call.id, f'❌ Ошибка: {e}')
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('escalation_'))
 def handle_escalation_response(call):
@@ -184,7 +221,7 @@ def handle_escalation_response(call):
 @app.route('/')
 def home():
     if 'username' in session:
-        active_tasks, completed_tasks = get_user_tasks(session['username'])
+        active_tasks, _ = get_user_tasks(session['username'])  # Не нужны completed_tasks
         
         # Форматируем время для активных задач
         formatted_active = []
@@ -192,13 +229,6 @@ def home():
             task_list = list(task)
             task_list[3] = format_ukrainian_time(task[3])
             formatted_active.append(tuple(task_list))
-        
-        # Форматируем время для выполненных задач
-        formatted_completed = []
-        for task in completed_tasks:
-            task_list = list(task)
-            task_list[3] = format_ukrainian_time(task[3])
-            formatted_completed.append(tuple(task_list))
         
         # Получаем использованные никнеймы для автозаполнения
         conn = sqlite3.connect('bot_database.db')
@@ -210,7 +240,6 @@ def home():
         return render_template('dashboard.html', 
                              username=session['username'], 
                              active_tasks=formatted_active,
-                             completed_tasks=formatted_completed,
                              used_usernames=used_usernames)
     return render_template('login.html')
 
@@ -298,6 +327,7 @@ def send_task_notification(task_data):
     repeat_weekly = task_data[5]
     week_day = task_data[6]
     assigned_to = task_data[7] if len(task_data) > 7 else None
+    allow_multiple = task_data[8] if len(task_data) > 8 else 0
     
     print(f'DEBUG: assigned_to in function = "{assigned_to}"')
     
@@ -325,7 +355,7 @@ def send_task_notification(task_data):
             
             markup = telebot.types.InlineKeyboardMarkup()
             btn = telebot.types.InlineKeyboardButton('✅ Выполнено', 
-                                                   callback_data=f'done_{task_id}_{username}_{require_photo}')
+                                                callback_data=f'done_{task_id}_{username}_{require_photo}_{allow_multiple}')
             markup.add(btn)
             
             bot.send_message(chat_id, message_text, reply_markup=markup)
@@ -362,10 +392,10 @@ def check_and_send_notifications():
     print(f'Все активные задачи: {all_active}')
     
     cursor.execute('''
-        SELECT id, username, task_text, repeat_daily, require_photo, repeat_weekly, week_day, assigned_to FROM tasks 
+        SELECT id, username, task_text, repeat_daily, require_photo, repeat_weekly, week_day, assigned_to, allow_multiple FROM tasks 
         WHERE task_time = ? AND is_active = 1 
         AND (
-            (repeat_daily = 0 AND repeat_weekly = 0) OR
+            (repeat_daily = 0 AND repeat_weekly = 0 AND repeat_monthly = 0 AND (task_date IS NULL OR task_date = ?)) OR
             (repeat_daily = 1 AND id NOT IN (
                 SELECT DISTINCT task_id FROM task_completions 
                 WHERE DATE(completed_at) = ? AND task_id IS NOT NULL
@@ -373,9 +403,13 @@ def check_and_send_notifications():
             (repeat_weekly = 1 AND week_day = ? AND id NOT IN (
                 SELECT DISTINCT task_id FROM task_completions 
                 WHERE DATE(completed_at) = ? AND task_id IS NOT NULL
+            )) OR
+            (repeat_monthly = 1 AND CAST(strftime('%d', 'now', 'localtime') AS INTEGER) = month_day AND id NOT IN (
+                SELECT DISTINCT task_id FROM task_completions 
+                WHERE DATE(completed_at) = ? AND task_id IS NOT NULL
             ))
         )
-    ''', (current_time, current_date, current_weekday, current_date))
+    ''', (current_time, current_date, current_date, current_weekday, current_date, current_date))
     tasks_to_send = cursor.fetchall()
 
     print(f'Задачи для отправки: {tasks_to_send}')
@@ -398,11 +432,39 @@ def check_and_send_notifications():
             # Сохраняем время в украинском часовом поясе
             ukraine_tz = pytz.timezone('Europe/Kiev')
             current_ukraine_time = datetime.now(ukraine_tz).strftime('%Y-%m-%d %H:%M:%S')
+            allow_multiple = task_data[8] if len(task_data) > 8 else 0
 
-            cursor.execute('INSERT INTO sent_tasks (task_id, username, task_text, sent_at) VALUES (?, ?, ?, ?)', 
-                (task_id, username, task_text, current_ukraine_time))
+            cursor.execute('INSERT INTO sent_tasks (task_id, username, task_text, sent_at, allow_multiple, message_id, chat_id) VALUES (?, ?, ?, ?, ?, ?, ?)', 
+                (task_id, username, task_text, current_ukraine_time, allow_multiple, None, None))
             conn.commit()
             print(f'DEBUG: Записали в sent_tasks: task_id={task_id}, username={username}, text={task_text}')
+
+            # Проверяем групповые задачи старше 2 часов и деактивируем их
+            two_hours_ago = datetime.now(ukraine_tz) - timedelta(hours=2)
+            cursor.execute('''
+                SELECT DISTINCT st.task_id, st.username FROM sent_tasks st
+                WHERE st.allow_multiple = 1 
+                AND datetime(st.sent_at) <= datetime(?)
+                AND st.buttons_removed = 0
+            ''', (two_hours_ago.strftime('%Y-%m-%d %H:%M:%S'),))
+
+            expired_group_tasks = cursor.fetchall()
+
+            for task_id, task_username in expired_group_tasks:
+                try:
+                    # Деактивируем разовые групповые задачи
+                    cursor.execute('SELECT repeat_daily, repeat_weekly, repeat_monthly FROM tasks WHERE id = ?', (task_id,))
+                    task_info = cursor.fetchone()
+                    if task_info and task_info[0] == 0 and task_info[1] == 0 and task_info[2] == 0:
+                        cursor.execute('UPDATE tasks SET is_active = 0 WHERE id = ?', (task_id,))
+                        print(f'Групповая задача {task_id} деактивирована через 2 часа')
+                    
+                    # Помечаем как обработанные
+                    cursor.execute('UPDATE sent_tasks SET buttons_removed = 1 WHERE task_id = ? AND allow_multiple = 1', (task_id,))
+                    conn.commit()
+                    print(f'Кнопки убраны для групповой задачи {task_id}')
+                except Exception as e:
+                    print(f'Ошибка удаления кнопок: {e}')
 
     conn.close()
     
@@ -421,7 +483,7 @@ def check_and_send_notifications():
                 print(f'Ошибка запроса фото: {e}')
 
     # Эскалация - проверяем задачи отправленные больше 2 минут назад
-    escalation_time_threshold = datetime.now(ukraine_tz) - timedelta(minutes=15)
+    escalation_time_threshold = datetime.now(ukraine_tz) - timedelta(minutes=5)
     print(f'DEBUG: Ищем задачи отправленные раньше: {escalation_time_threshold.strftime("%H:%M:%S")}')
     
     # Создаём новое соединение для эскалации
@@ -506,19 +568,18 @@ def logout():
     session.clear()
     return redirect('/')
 
-def save_task(username, task_time, task_text, repeat_daily=0, repeat_weekly=0, week_day=0, require_photo=0, assigned_to=None):
+def save_task(username, task_time, task_text, repeat_daily=0, repeat_weekly=0, week_day=0, require_photo=0, assigned_to=None, task_date=None, repeat_monthly=0, month_day=1, allow_multiple=0):
     conn = sqlite3.connect('bot_database.db')
     cursor = conn.cursor()
     
-    # Сохраняем задачу
-    cursor.execute('INSERT INTO tasks (username, task_time, task_text, assigned_to, repeat_daily, repeat_weekly, week_day, require_photo) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', 
-                  (username, task_time, task_text, assigned_to, repeat_daily, repeat_weekly, week_day, require_photo))
+    cursor.execute('INSERT INTO tasks (username, task_time, task_text, task_date, assigned_to, repeat_daily, repeat_weekly, week_day, require_photo, repeat_monthly, month_day, allow_multiple) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', 
+              (username, task_time, task_text, task_date, assigned_to, repeat_daily, repeat_weekly, week_day, require_photo, repeat_monthly, month_day, allow_multiple))
     
     # Если указан исполнитель, сохраняем его в список использованных никнеймов
     if assigned_to:
         try:
-            cursor.execute('INSERT OR IGNORE INTO used_usernames (username, nickname) VALUES (?, ?)', 
-                          (username, assigned_to))
+            cursor.execute('INSERT INTO tasks (username, task_time, task_text, task_date, assigned_to, repeat_daily, repeat_weekly, week_day, require_photo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', 
+              (username, task_time, task_text, task_date, assigned_to, repeat_daily, repeat_weekly, week_day, require_photo))
         except:
             pass  # Игнорируем если никнейм уже есть
     
@@ -530,15 +591,25 @@ def get_user_tasks(username):
     cursor = conn.cursor()
     
     # Получаем активные задачи с исполнителями
-    cursor.execute('SELECT id, task_time, task_text, created_at, repeat_daily, require_photo, repeat_weekly, week_day, assigned_to FROM tasks WHERE username = ? AND is_active = 1 ORDER BY task_time', 
-                  (username,))
+    cursor.execute('SELECT id, task_time, task_text, created_at, repeat_daily, require_photo, repeat_weekly, week_day, assigned_to, task_date, repeat_monthly, month_day, allow_multiple FROM tasks WHERE username = ? AND is_active = 1 ORDER BY created_at DESC', 
+                (username,))
     active_tasks = cursor.fetchall()
     
-    # Получаем выполненные разовые задачи
-    cursor.execute('SELECT id, task_time, task_text, created_at, repeat_daily, require_photo, repeat_weekly, week_day, assigned_to FROM tasks WHERE username = ? AND is_active = 0 AND repeat_daily = 0 AND repeat_weekly = 0 ORDER BY task_time', 
-                  (username,))
+    # Получаем выполненные разовые задачи с группировкой выполнений
+    cursor.execute('''
+        SELECT t.id, t.task_time, t.task_text, t.created_at, t.repeat_daily, t.require_photo, 
+            t.repeat_weekly, t.week_day, t.assigned_to, t.task_date, t.repeat_monthly, t.month_day,
+            t.allow_multiple,
+            MIN(tc.completed_at) as first_completed_at,
+            GROUP_CONCAT(tc.completed_by, ', ') as all_completed_by
+        FROM tasks t
+        LEFT JOIN task_completions tc ON t.id = tc.task_id
+        WHERE t.username = ? AND t.is_active = 0 AND t.repeat_daily = 0 AND t.repeat_weekly = 0 AND t.repeat_monthly = 0 
+        GROUP BY t.id
+        ORDER BY MIN(tc.completed_at) DESC
+    ''', (username,))
     completed_tasks = cursor.fetchall()
-    
+
     conn.close()
     return active_tasks, completed_tasks
 
@@ -596,7 +667,7 @@ def edit_task(task_id):
     # Получаем данные задачи
     conn = sqlite3.connect('bot_database.db')
     cursor = conn.cursor()
-    cursor.execute('SELECT id, task_time, task_text, username, repeat_daily, require_photo, repeat_weekly, week_day, assigned_to FROM tasks WHERE id = ?', (task_id,))
+    cursor.execute('SELECT id, task_time, task_text, username, repeat_daily, require_photo, repeat_weekly, week_day, assigned_to, task_date, repeat_monthly, month_day FROM tasks WHERE id = ?', (task_id,))
     task = cursor.fetchone()
     
     # Получаем использованные никнеймы для автозаполнения
@@ -620,17 +691,21 @@ def update_task(task_id):
     repeat_type = request.form['repeat_type']
     week_day = int(request.form.get('week_day', 0))
     require_photo = 1 if 'require_photo' in request.form else 0
+    allow_multiple = 1 if 'allow_multiple' in request.form else 0
     assigned_to = request.form.get('assigned_to', '').strip() or None
+    task_date = request.form.get('task_date', '').strip() or None
+    month_day = int(request.form.get('month_day', 1))
     
     # Определяем тип повторения
     repeat_daily = 1 if repeat_type == 'daily' else 0
     repeat_weekly = 1 if repeat_type == 'weekly' else 0
-    
+    repeat_monthly = 1 if repeat_type == 'monthly' else 0
+
     # Обновляем задачу
     conn = sqlite3.connect('bot_database.db')
     cursor = conn.cursor()
-    cursor.execute('UPDATE tasks SET task_time = ?, task_text = ?, repeat_daily = ?, repeat_weekly = ?, week_day = ?, require_photo = ?, assigned_to = ? WHERE id = ? AND username = ?', 
-                  (task_time, task_text, repeat_daily, repeat_weekly, week_day, require_photo, assigned_to, task_id, session['username']))
+    cursor.execute('UPDATE tasks SET task_time = ?, task_text = ?, repeat_daily = ?, repeat_weekly = ?, week_day = ?, require_photo = ?, assigned_to = ?, task_date = ?, repeat_monthly = ?, month_day = ?, allow_multiple = ? WHERE id = ? AND username = ?', 
+                (task_time, task_text, repeat_daily, repeat_weekly, week_day, require_photo, assigned_to, task_date, repeat_monthly, month_day, allow_multiple, task_id, session['username']))
     
     # Если указан новый исполнитель, сохраняем его в список использованных никнеймов
     if assigned_to:
@@ -676,14 +751,18 @@ def add_task():
     repeat_type = request.form['repeat_type']
     week_day = int(request.form.get('week_day', 0))
     require_photo = 1 if 'require_photo' in request.form else 0
+    allow_multiple = 1 if 'allow_multiple' in request.form else 0
     assigned_to = request.form.get('assigned_to', '').strip() or None
+    task_date = request.form.get('task_date', '').strip() or None
+    month_day = int(request.form.get('month_day', 1))
     username = session['username']
     
     # Определяем тип повторения
     repeat_daily = 1 if repeat_type == 'daily' else 0
     repeat_weekly = 1 if repeat_type == 'weekly' else 0
-    
-    save_task(username, task_time, task_text, repeat_daily, repeat_weekly, week_day, require_photo, assigned_to)
+    repeat_monthly = 1 if repeat_type == 'monthly' else 0
+
+    save_task(username, task_time, task_text, repeat_daily, repeat_weekly, week_day, require_photo, assigned_to, task_date, repeat_monthly, month_day, allow_multiple)
     return redirect('/')
 
 @app.route('/update_chat_id', methods=['POST'])
@@ -717,6 +796,44 @@ def reports():
     
     return render_template('reports.html', username=session['username'], reports=formatted_reports)
 
+@app.route('/completed_tasks')
+def completed_tasks():
+    if 'username' not in session:
+        return redirect('/')
+    
+    # Получаем только выполненные задачи
+    conn = sqlite3.connect('bot_database.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+        SELECT t.id, t.task_time, t.task_text, t.created_at, t.repeat_daily, t.require_photo, 
+               t.repeat_weekly, t.week_day, t.assigned_to, t.task_date, t.repeat_monthly, t.month_day,
+               t.allow_multiple,
+               MIN(tc.completed_at) as first_completed_at,
+               GROUP_CONCAT(tc.completed_by, ', ') as all_completed_by
+        FROM tasks t
+        LEFT JOIN task_completions tc ON t.id = tc.task_id
+        WHERE t.username = ? AND t.is_active = 0 AND t.repeat_daily = 0 AND t.repeat_weekly = 0 AND t.repeat_monthly = 0 
+        GROUP BY t.id
+        ORDER BY MIN(tc.completed_at) DESC
+    ''', (session['username'],))
+    completed_tasks = cursor.fetchall()
+    
+    conn.close()
+    
+    # Форматируем время для выполненных задач
+    formatted_completed = []
+    for task in completed_tasks:
+        task_list = list(task)
+        task_list[3] = format_ukrainian_time(task[3])  # Время создания
+        if task[13]:  # Если есть время выполнения
+            task_list[13] = format_ukrainian_time(task[13])  # Время выполнения
+        formatted_completed.append(tuple(task_list))
+    
+    return render_template('completed_tasks.html', 
+                         username=session['username'], 
+                         completed_tasks=formatted_completed)
+
 @app.route('/settings')
 def settings():
     if 'username' not in session:
@@ -743,6 +860,51 @@ def settings():
                          current_chat_id=current_chat_id,
                          current_chat_info=current_chat_info,
                          chat_members=chat_members)
+
+@app.route('/delete_multiple_tasks', methods=['POST'])
+def delete_multiple_tasks():
+    if 'username' not in session:
+        return {'success': False, 'error': 'Не авторизован'}, 401
+    
+    try:
+        import json
+        data = request.get_json()
+        task_ids = data.get('task_ids', [])
+        task_type = data.get('type', '')
+        
+        if not task_ids:
+            return {'success': False, 'error': 'Не выбраны задачи'}
+        
+        conn = sqlite3.connect('bot_database.db')
+        cursor = conn.cursor()
+        
+        # Проверяем что все задачи принадлежат пользователю
+        placeholders = ','.join(['?' for _ in task_ids])
+        cursor.execute(f'SELECT id FROM tasks WHERE id IN ({placeholders}) AND username = ?', 
+                      task_ids + [session['username']])
+        
+        valid_tasks = [row[0] for row in cursor.fetchall()]
+        
+        if len(valid_tasks) != len(task_ids):
+            conn.close()
+            return {'success': False, 'error': 'Некоторые задачи не найдены'}
+        
+        # Удаляем задачи и связанные данные
+        for task_id in valid_tasks:
+            # Удаляем выполнения задач
+            cursor.execute('DELETE FROM task_completions WHERE task_id = ?', (task_id,))
+            # Удаляем отправленные уведомления
+            cursor.execute('DELETE FROM sent_tasks WHERE task_id = ?', (task_id,))
+            # Удаляем саму задачу
+            cursor.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return {'success': True, 'deleted_count': len(valid_tasks)}
+        
+    except Exception as e:
+        return {'success': False, 'error': str(e)}, 500
 
 # Запуск бота
 def run_bot():

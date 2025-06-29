@@ -23,10 +23,16 @@
             <small style="color: #666;">💡 Укажите @username для персональной задачи</small>
         </p>
         <p>
-            <label>Тип повторения:</label><br>
-            <input type="radio" name="repeat_type" value="once" {% if task[4] == 0 and task[6] == 0 %}checked{% endif %}> 📅 Разовая задача<br>
-            <input type="radio" name="repeat_type" value="daily" {% if task[4] == 1 %}checked{% endif %}> 🔄 Ежедневно<br>
-            <input type="radio" name="repeat_type" value="weekly" {% if task[6] == 1 %}checked{% endif %}> 📅 Еженедельно
+            <input type="radio" name="repeat_type" value="daily" {% if task[4] == 1 %}checked{% endif %}> 🔄 Постоянные задачи<br>
+            <input type="radio" name="repeat_type" value="weekly" {% if task[6] == 1 %}checked{% endif %}> 📅 Еженедельно<br>
+            <input type="radio" name="repeat_type" value="monthly" {% if task[10] == 1 %}checked{% endif %}> 🗓️ Ежемесячно<br>
+            <input type="radio" name="repeat_type" value="once" {% if task[4] == 0 and task[6] == 0 and task[10] == 0 and not task[9] %}checked{% endif %}> 📅 Разовая задача (сегодня)<br>
+            <input type="radio" name="repeat_type" value="specific" {% if task[4] == 0 and task[6] == 0 and task[10] == 0 and task[9] %}checked{% endif %}> 🗓️ Конкретная дата<br>
+        </p>
+        <p id="specific_date_select" {% if not task[9] %}style="display: none;"{% endif %}>
+            <label>Выберите дату:</label><br>
+            <input type="date" name="task_date" id="task_date" value="{% if task[9] %}{{ task[9] }}{% endif %}">
+            <small style="color: #666;">💡 Можно выбрать только будущие даты</small>
         </p>
         <p id="week_day_select" {% if task[6] == 0 %}style="display: none;"{% endif %}>
             <label>День недели:</label><br>
@@ -40,10 +46,22 @@
                 <option value="6" {% if task[7] == 6 %}selected{% endif %}>Воскресенье</option>
             </select>
         </p>
+        <p id="month_day_select" {% if task[10] == 0 %}style="display: none;"{% endif %}>
+            <label>День месяца:</label><br>
+            <input type="number" name="month_day" min="1" max="31" value="{% if task[11] %}{{ task[11] }}{% else %}1{% endif %}" style="width: 80px;">
+            <small style="color: #666;">💡 Если в месяце нет такого дня, задача выполнится в последний день месяца</small>
+        </p>
         <p>
             <label>
                 <input type="checkbox" name="require_photo" value="1" {% if task[5] == 1 %}checked{% endif %}>
                 📸 Требует фото-отчёт (через 5 мин после выполнения)
+            </label>
+        </p>
+
+        <p>
+            <label>
+                <input type="checkbox" name="allow_multiple" value="1" {% if task[12] == 1 %}checked{% endif %}>
+                👥 Разрешить выполнение нескольким участникам (кнопка исчезнет через 2 часа)
             </label>
         </p>
         <p>
@@ -53,18 +71,52 @@
     </form>
     
     <script>
-        // Показываем выбор дня недели только для еженедельных задач
-        document.querySelectorAll('input[name="repeat_type"]').forEach(radio => {
-            radio.addEventListener('change', function() {
-                const weekDaySelect = document.getElementById('week_day_select');
-                if (this.value === 'weekly') {
-                    weekDaySelect.style.display = 'block';
-                } else {
-                    weekDaySelect.style.display = 'none';
-                }
+            // Показываем соответствующие поля в зависимости от типа повторения
+            document.querySelectorAll('input[name="repeat_type"]').forEach(radio => {
+                radio.addEventListener('change', function() {
+                    const weekDaySelect = document.getElementById('week_day_select');
+                    const monthDaySelect = document.getElementById('month_day_select');
+                    const dateSelect = document.getElementById('specific_date_select');
+                    
+                    if (this.value === 'weekly') {
+                        weekDaySelect.style.display = 'block';
+                        monthDaySelect.style.display = 'none';
+                        dateSelect.style.display = 'none';
+                    } else if (this.value === 'monthly') {
+                        weekDaySelect.style.display = 'none';
+                        monthDaySelect.style.display = 'block';
+                        dateSelect.style.display = 'none';
+                    } else if (this.value === 'specific') {
+                        weekDaySelect.style.display = 'none';
+                        monthDaySelect.style.display = 'none';
+                        dateSelect.style.display = 'block';
+                    } else {
+                        weekDaySelect.style.display = 'none';
+                        monthDaySelect.style.display = 'none';
+                        dateSelect.style.display = 'none';
+                    }
+                });
             });
-        });
+
+            // Устанавливаем минимальную дату
+                    document.addEventListener('DOMContentLoaded', function() {
+                        const dateInput = document.getElementById('task_date');
+                        const today = new Date().toISOString().split('T')[0];
+                        
+                        // Устанавливаем минимальную дату - сегодня
+                        dateInput.min = today;
+                        
+                        // При выборе "конкретная дата" автоматически ставим сегодняшнюю дату (если поле пустое)
+                        document.querySelectorAll('input[name="repeat_type"]').forEach(radio => {
+                            radio.addEventListener('change', function() {
+                                if (this.value === 'specific' && !dateInput.value) {
+                                    dateInput.value = today;
+                                }
+                            });
+                        });
+                    });
     </script>
+
     <script>
     const assignedInput = document.getElementById('assigned_to');
     const suggestionsDiv = document.getElementById('suggestions');
@@ -120,5 +172,6 @@
         }
     });
     </script>
+    
 </body>
 </html>
