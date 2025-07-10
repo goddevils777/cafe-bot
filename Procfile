@@ -1,1 +1,1 @@
-echo "web: python3 app.py" > Procfile
+web: python3 app.py
