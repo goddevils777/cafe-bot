@@ -1,8 +1,6 @@
-# Обнови requirements.txt
-cat > requirements.txt << 'EOF'
+# Минимальные зависимости для Railway деплоя
 Flask==2.3.2
 pyTelegramBotAPI==4.12.0
 schedule==1.2.0
 pytz==2023.3
 requests==2.31.0
-EOF
