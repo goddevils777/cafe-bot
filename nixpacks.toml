@@ -1,4 +1,0 @@
-cat > nixpacks.toml << 'EOF'
-[phases.start]
-cmd = "python3 app.py"
-EOF
