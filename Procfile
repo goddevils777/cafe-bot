@@ -1,1 +1,1 @@
-web: python3 app.py
+printf "web: python3 app.py" > Procfile
